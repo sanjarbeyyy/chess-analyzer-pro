@@ -38,14 +38,33 @@ jobs:
         shell: pwsh
         run: |
           $release = Invoke-RestMethod -Uri "https://api.github.com/repos/official-stockfish/Stockfish/releases/latest"
-          $asset = $release.assets | Where-Object { $_.name -match "windows-x86-64-avx2\.zip$" } | Select-Object -First 1
+          Write-Host "Barcha assetlar:"
+          $release.assets | ForEach-Object { Write-Host " - $($_.name)" }
+
+          $zipAssets = $release.assets | Where-Object { $_.name -match "(?i)windows" -and $_.name -match "\.zip$" }
+
+          # Eng mos keluvchisini tanlash: avval avx2 (eski nomlash), keyin
+          # "universal"/oddiy windows.zip (yangi nomlash), aks holda birinchi topilgani.
+          $asset = $zipAssets | Where-Object { $_.name -match "(?i)avx2" } | Select-Object -First 1
           if (-not $asset) {
-            $asset = $release.assets | Where-Object { $_.name -match "windows-x86-64\.zip$" } | Select-Object -First 1
+            $asset = $zipAssets | Where-Object { $_.name -notmatch "(?i)avx512|bmi2|vnni|sse|popcnt|armv8|arm64|android" } | Select-Object -First 1
           }
-          Write-Host "Yuklanmoqda: $($asset.name)"
+          if (-not $asset) {
+            $asset = $zipAssets | Select-Object -First 1
+          }
+          if (-not $asset) {
+            Write-Error "Windows uchun mos Stockfish assetini topib bo'lmadi. Yuqoridagi ro'yxatni tekshiring."
+            exit 1
+          }
+
+          Write-Host "Tanlandi: $($asset.name)"
           Invoke-WebRequest -Uri $asset.browser_download_url -OutFile stockfish.zip
           Expand-Archive stockfish.zip -DestinationPath stockfish_extracted -Force
           $exe = Get-ChildItem -Path stockfish_extracted -Filter "stockfish*.exe" -Recurse | Select-Object -First 1
+          if (-not $exe) {
+            Write-Error "Arxiv ichidan stockfish*.exe topilmadi."
+            exit 1
+          }
           Copy-Item $exe.FullName -Destination stockfish.exe
           Write-Host "Stockfish tayyor: stockfish.exe"
 
