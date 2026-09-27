@@ -75,7 +75,15 @@ class StockfishEngine:
 
     def __init__(self, path: str | None = None, threads: int = 2, hash_mb: int = 256):
         self.path = find_stockfish_path(path)
-        self.engine = chess.engine.SimpleEngine.popen_uci(self.path)
+
+        # Windows'da Stockfish o'zining qora konsol oynasini ochib
+        # yubormasligi uchun (u orqa fonda, ko'rinmas holda ishlashi kerak).
+        popen_kwargs = {}
+        if sys.platform == "win32":
+            import subprocess
+            popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+
+        self.engine = chess.engine.SimpleEngine.popen_uci(self.path, **popen_kwargs)
         try:
             self.engine.configure({"Threads": threads, "Hash": hash_mb})
         except Exception:
