@@ -1,0 +1,66 @@
+name: Build Windows EXE
+
+# Bu workflow Windows kompyuter talab qilmaydi -- GitHub'ning bulut
+# serverida ishlaydi va tayyor .exe faylni "Artifacts" bo'limiga chiqaradi.
+#
+# Ishlatish:
+#   1. Shu repo'ni GitHub'ga yuklang (push qiling).
+#   2. GitHub sahifasida "Actions" bo'limiga o'ting.
+#   3. "Build Windows EXE" workflow'ini tanlang -> "Run workflow" tugmasini bosing.
+#   4. ~3-5 daqiqa kuting, keyin tugagan run ichidan "ChessAnalyzerPro-windows"
+#      arxivini yuklab oling -- ichida ChessAnalyzerPro.exe + stockfish.exe bor.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Kodni olish
+        uses: actions/checkout@v4
+
+      - name: Python o'rnatish
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Python kutubxonalarini o'rnatish
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Stockfish (Windows) ni yuklab olish
+        shell: pwsh
+        run: |
+          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/official-stockfish/Stockfish/releases/latest"
+          $asset = $release.assets | Where-Object { $_.name -match "windows-x86-64-avx2\.zip$" } | Select-Object -First 1
+          if (-not $asset) {
+            $asset = $release.assets | Where-Object { $_.name -match "windows-x86-64\.zip$" } | Select-Object -First 1
+          }
+          Write-Host "Yuklanmoqda: $($asset.name)"
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile stockfish.zip
+          Expand-Archive stockfish.zip -DestinationPath stockfish_extracted -Force
+          $exe = Get-ChildItem -Path stockfish_extracted -Filter "stockfish*.exe" -Recurse | Select-Object -First 1
+          Copy-Item $exe.FullName -Destination stockfish.exe
+          Write-Host "Stockfish tayyor: stockfish.exe"
+
+      - name: .exe faylni PyInstaller bilan yig'ish
+        run: pyinstaller chess_analyzer.spec --noconfirm
+
+      - name: Stockfish'ni chiqish papkasiga qo'shish
+        shell: pwsh
+        run: Copy-Item stockfish.exe -Destination dist\stockfish.exe
+
+      - name: Natijalarni "Artifacts" sifatida yuklash
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChessAnalyzerPro-windows
+          path: |
+            dist/ChessAnalyzerPro.exe
+            dist/stockfish.exe
+          retention-days: 30
